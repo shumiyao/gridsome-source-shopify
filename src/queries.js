@@ -1,332 +1,96 @@
-export const ARTICLES_QUERY = `
-  query Articles ($first: Int!, $after: String) {
-    data: articles (first: $first, after: $after) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        cursor
-        node {
-          author: authorV2 {
-            bio
-            email
-            firstName
-            lastName
-            name
-          }
-          blog {
-            id
-          }
-          comments(first: 250) {
-            edges {
-              node {
-                author {
-                  email
-                  name
-                }
-                content
-                contentHtml
-                id
-              }
-            }
-          }
-          content
-          contentHtml
-          excerpt
-          excerptHtml
-          handle
-          id
-          image {
-            altText
-            id
-            originalSrc
-          }
-          publishedAt
-          seo {
-            description
-            title
-          }
-          tags
-          title
-          url
+import got from 'got'
+import { COLLECTION_QUERY } from './queries'
+
+/**
+ * Create a Shopify Storefront GraphQL client for the provided name and token.
+ */
+export const createClient = ({ storeUrl, storefrontToken, timeout }) => got.extend({
+  prefixUrl: `${storeUrl}/api/2022-04`,
+  headers: {
+    'X-Shopify-Storefront-Access-Token': storefrontToken
+  },
+  resolveBodyOnly: true,
+  responseType: 'json',
+  retry: 2,
+  timeout
+})
+
+/**
+ * Get all paginated data from a query. Will execute multiple requests as
+ * needed.
+ */
+export const queryAll = async (client, query, variables) => {
+  const items = client.paginate.each('graphql.json', {
+    method: 'POST',
+    json: { query, variables },
+    pagination: {
+      backoff: 1000,
+      transform: ({ body: { data, errors } }) => {
+        if (errors) return []
+        return data.data.edges
+      },
+      paginate: (response, allItems, currentItems) => {
+        const { errors, data } = response.body
+        if (errors) throw new Error(errors[ 0 ].message)
+
+        const { pageInfo } = data.data
+        if (!pageInfo.hasNextPage) return false
+
+        const lastItem = currentItems[ currentItems.length - 1 ]
+        const newVariables = { ...variables, after: lastItem.cursor }
+
+        return {
+          json: { query, variables: newVariables }
         }
       }
     }
-  }
-`
+  })
 
-export const BLOGS_QUERY = `
-  query Blogs ($first: Int!, $after: String) {
-    data: blogs(first: $first, after: $after) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        cursor
-        node {
-          authors {
-            email
+  const allNodes = []
+  for await (const { node, typeName } of items) {
+    if (typeName !== 'CollectionEdge') {
+      allNodes.push(node)
+      continue
+    }
+
+    // Currently setup for Collection.products field, but can extend this method in future, if needed
+    if (!node.products.pageInfo.hasNextPage) {
+      allNodes.push(node)
+      continue
+    }
+
+    const lastProduct = node.products.edges[ node.products.edges.length - 1 ]
+    const collectionVariables = { ...variables, handle: node.handle, after: lastProduct.cursor }
+
+    const remainingProducts = await client.paginate.all('graphql.json', {
+      method: 'POST',
+      json: { query: COLLECTION_QUERY, variables: collectionVariables },
+      pagination: {
+        backoff: 1000,
+        transform: ({ body: { data, errors } }) => {
+          if (errors) return []
+          return data.collection.products.edges
+        },
+        paginate: (response, allItems, currentItems) => {
+          const { errors, data } = response.body
+          if (errors) throw new Error(errors[ 0 ].message)
+
+          const { pageInfo } = data.collection.products
+          if (!pageInfo.hasNextPage) return false
+
+          const lastItem = currentItems[ currentItems.length - 1 ]
+          const newVariables = { ...collectionVariables, after: lastItem.cursor }
+
+          return {
+            json: { query: COLLECTION_QUERY, variables: newVariables }
           }
-          handle
-          id
-          title
-          url
         }
       }
-    }
-  }
-`
+    })
 
-export const COLLECTIONS_QUERY = `
-  query Collections ($first: Int!, $after: String) {
-    data: collections (first: $first, after: $after) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        typeName: __typename
-        cursor
-        node {
-          description
-          descriptionHtml
-          handle
-          id
-          image {
-            altText
-            id
-            originalSrc
-          }
-          products (sortKey: COLLECTION_DEFAULT, first: $first) {
-            pageInfo {
-              hasNextPage
-            }
-            edges {
-              cursor
-              node {
-                id
-              }
-            }
-          }
-          title
-          updatedAt
-        }
-      }
-    }
+    const edges = [...node.products.edges, ...remainingProducts]
+    allNodes.push({ ...node, products: { edges } })
   }
-`
 
-export const COLLECTION_QUERY = `query SingleCollection ($handle: String!, $first: Int!, $after: String) {
-  collection: collectionByHandle (handle: $handle) {
-    products (sortKey: COLLECTION_DEFAULT, first: $first, after: $after) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        cursor
-        node {
-          id
-        }
-      }
-    }
-  }
-}`
-
-export const PRODUCTS_QUERY = `
-  query Products ($first: Int!, $after: String) {
-    data: products (first: $first, after: $after) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        cursor
-        node {
-          collections (first: $first) {
-            edges {
-              node {
-                id
-              }
-            }
-          }
-          images(first: 250) {
-            edges {
-              node {
-                id
-                altText
-                originalSrc
-              }
-            }
-          }
-          variants(first: 250) {
-            edges {
-              node {
-                availableForSale
-                compareAtPrice: compareAtPriceV2 {
-                  amount
-                  currencyCode
-                }
-                id
-                image {
-                  altText
-                  id
-                  originalSrc
-                }
-                metafields(first: 250) {
-                  edges {
-                    node {
-                      key
-                      value
-                    }
-                  }
-                }
-                price: priceV2 {
-                  amount
-                  currencyCode
-                }
-                requiresShipping
-                selectedOptions {
-                  name
-                  value
-                }
-                sku
-                title
-                unitPrice {
-                  amount
-                  currencyCode
-                }
-                weight
-                weightUnit
-              }
-            }
-          }
-          availableForSale
-          compareAtPriceRange {
-            minVariantPrice {
-              amount
-              currencyCode
-            }
-            maxVariantPrice {
-              amount
-              currencyCode
-            }
-          }
-          createdAt
-          description
-          descriptionHtml
-          handle
-          id
-          metafields(first: 250) {
-            edges {
-              node {
-                key
-                value
-              }
-            }
-          }
-          onlineStoreUrl
-          options {
-            id
-            name
-            values
-          }
-          priceRange {
-            minVariantPrice {
-              amount
-              currencyCode
-            }
-            maxVariantPrice {
-              amount
-              currencyCode
-            }
-          }
-          productType
-          publishedAt
-          tags
-          title
-          updatedAt
-          vendor
-        }
-      }
-    }
-  }
-`
-
-export const SHOP_QUERY = `
-  query Shop {
-    shop {
-      description
-      moneyFormat
-      name
-      shipsToCountries
-      privacyPolicy {
-        body
-        handle
-        id
-        title
-        url
-      }
-      refundPolicy {
-        body
-        handle
-        id
-        title
-        url
-      }
-      termsOfService {
-        body
-        handle
-        id
-        title
-        url
-      }
-    }
-  }
-`
-
-export const PRODUCT_TYPES_QUERY = `
-  query ProductTypes ($first: Int!) {
-    data: productTypes(first: $first) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        cursor
-        node
-      }
-    }
-  }
-`
-export const PRODUCT_TAGS_QUERY = `
-  query ProductTags ($first: Int!) {
-    data: productTags(first: $first) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        cursor
-        node
-      }
-    }
-  }
-`
-
-export const PAGES_QUERY = `
-  query Pages ($first: Int!) {
-    data: pages (first: $first) {
-      pageInfo {
-        hasNextPage
-      }
-      edges {
-        cursor
-        node {
-          body
-          bodySummary
-          createdAt
-          handle
-          id
-          title
-          updatedAt
-        }
-      }
-    }
-  }
-`
+  return allNodes
+}
