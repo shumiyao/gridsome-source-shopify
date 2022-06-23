@@ -226,9 +226,8 @@ class ShopifySource {
   }
 
   createShopifyId (id, name) {
-    const originalId = Buffer.from(id, 'base64').toString()
     const key = camelCase(name, { pascalCase: true })
-    return Buffer.from(`${originalId}/${key}`).toString('base64')
+    return `${id}/${key}`
   }
 }
 
