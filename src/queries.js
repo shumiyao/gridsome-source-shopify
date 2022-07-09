@@ -117,6 +117,14 @@ const COLLECTIONS_QUERY = `
               }
             }
           }
+          metafields(first: 250) {
+            edges {
+              node {
+                key
+                value
+              }
+            }
+          }
           title
           updatedAt
         }
@@ -272,7 +280,6 @@ const SHOP_QUERY = `
         handle
         id
         title
-        url
       }
       refundPolicy {
         body
@@ -287,6 +294,14 @@ const SHOP_QUERY = `
         id
         title
         url
+      }
+      metafields(first: 250) {
+        edges {
+          node {
+            key
+            value
+          }
+        }
       }
     }
   }
@@ -335,6 +350,14 @@ const PAGES_QUERY = `
           id
           title
           updatedAt
+          metafields(first: 250) {
+            edges {
+              node {
+                key
+                value
+              }
+            }
+          }
         }
       }
     }
