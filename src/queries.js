@@ -55,6 +55,7 @@ const ARTICLES_QUERY = `
           metafields(first: 250) {
             edges {
               node {
+                namespace
                 key
                 value
               }
@@ -120,6 +121,7 @@ const COLLECTIONS_QUERY = `
           metafields(first: 250) {
             edges {
               node {
+                namespace
                 key
                 value
               }
@@ -191,6 +193,7 @@ const PRODUCTS_QUERY = `
                 metafields(first: 250) {
                   edges {
                     node {
+                      namespace
                       key
                       value
                     }
@@ -235,6 +238,7 @@ const PRODUCTS_QUERY = `
           metafields(first: 250) {
             edges {
               node {
+                namespace
                 key
                 value
               }
@@ -298,6 +302,7 @@ const SHOP_QUERY = `
       metafields(first: 250) {
         edges {
           node {
+            namespace
             key
             value
           }
@@ -353,6 +358,7 @@ const PAGES_QUERY = `
           metafields(first: 250) {
             edges {
               node {
+                namespace
                 key
                 value
               }
